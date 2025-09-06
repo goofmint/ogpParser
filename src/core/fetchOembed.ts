@@ -1,5 +1,5 @@
 import { getContents } from './getContents';
-import parseXML from 'fast-xml-parser';
+import { XMLParser } from 'fast-xml-parser';
 import he from 'he';
 import { request } from './request';
 
@@ -87,7 +87,8 @@ const getForXml = async (url: string): Promise<OembedData | undefined> => {
   const options = {
     tagValueProcessor: (val: string) => he.decode(val),
   };
-  const oembed = parseXML.parse(oembedXml, options);
+  const parseXML = new XMLParser(options);
+  const oembed = parseXML.parse(oembedXml);
   if (oembed.oembed) {
     return oembed.oembed as unknown as OembedData;
   } else {

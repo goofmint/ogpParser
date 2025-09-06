@@ -1,15 +1,11 @@
-import { request, RequestOptions } from './request';
+import { request } from './request';
 import { charsetConverter } from './charsetConverter';
-
-type Config = {
-  headers: RequestOptions['headers'];
-};
 
 export const getContents = async (
   url: string,
-  config?: Config
+  config?: RequestInit
 ): Promise<string> => {
   const headers = config?.headers;
   const res = await request.get(url, { headers });
-  return charsetConverter(res.data ?? res.text ?? '');
+  return charsetConverter(res.arrayBuffer ?? res.text ?? '');
 };

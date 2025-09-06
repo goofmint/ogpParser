@@ -3,77 +3,68 @@ import https, { RequestOptions as RequestOptionsBase } from 'https';
 
 type Options = Pick<RequestOptionsBase, 'headers' | 'method'>;
 
-type RequestConfig = Options & {
+type RequestConfig = RequestInit & {
   url: string;
 };
 type ResponseData<T> = {
   status: number;
-  headers?: IncomingHttpHeaders;
-  text?: string;
+  headers?: Headers;
+  arrayBuffer: ArrayBuffer;
+  text: string;
   data?: T;
   config: RequestConfig;
 };
 const REDIRECT_LOOP_LIMIT = 20;
 
-const httpRequest = <T = any>(
+const httpRequest = async <T = any>(
   url: string,
-  options: Options = {},
+  options: RequestInit = {},
   count = 0
 ): Promise<ResponseData<T>> => {
-  return new Promise((resolve, reject) => {
-    if (count > REDIRECT_LOOP_LIMIT) {
-      return reject(new Error('Redirect Loop Error'));
-    }
-    const req = https.request(url, options, (res) => {
-      const statusCode = res.statusCode ?? 0;
-      // Redirect
-      if (statusCode >= 300 && statusCode < 400 && res.headers.location) {
+  while (count < REDIRECT_LOOP_LIMIT) {
+    try {
+      const res = await fetch(url, options);
+      const status = res.status ?? 0;
+      if (status >= 300 && status < 400 && res.headers.has('location')) {
         const originalUrl = new URL(url);
         const newUrl = new URL(
-          res.headers.location,
+          res.headers.get('location') ?? '',
           originalUrl.origin
         ).toString();
-        httpRequest(newUrl, options, count + 1)
-          .then((res) => resolve(res))
-          .catch((err) => reject(err));
-        return;
+        return httpRequest(newUrl, options, count + 1);
       }
-
-      let data = '';
-
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      res.on('end', () => {
-        const responseData: ResponseData<T> = {
-          status: res.statusCode ?? 0,
-          headers: res.headers,
-          text: data || undefined,
-          data: undefined,
-          config: {
-            ...options,
-            url,
-          },
-        };
-        try {
-          responseData.data = JSON.parse(data);
-        } catch (err) {}
-        resolve(responseData);
-      });
-    });
-    req.on('error', (err) => {
-      reject(err);
-    });
-    req.end();
-  });
+      const arrayBuffer = await res.arrayBuffer();
+      const decoder = new TextDecoder("utf-8");
+      const text = decoder.decode(arrayBuffer);
+      const responseData: ResponseData<T> = {
+        status,
+        headers: res.headers,
+        text,
+        arrayBuffer,
+        data: undefined,
+        config: {
+          ...options,
+          url,
+        },
+      };
+      try {
+        responseData.data = JSON.parse(text);
+      } catch (err) {
+      }
+      return responseData;
+    } catch (err) {
+      console.error(err);
+      count++;
+    }
+  }
+  throw new Error('Request Error');
 };
 
 export type RequestOptions = Omit<Options, 'method'>;
 
 export const request = {
-  get: <T = any>(url: string, options: RequestOptions = {}) =>
+  get: <T = any>(url: string, options: RequestInit = {}) =>
     httpRequest<T>(url, { ...options, method: 'get' }),
-  post: <T = any>(url: string, options: RequestOptions = {}) =>
+  post: <T = any>(url: string, options: RequestInit = {}) =>
     httpRequest<T>(url, { ...options, method: 'post' }),
 };
