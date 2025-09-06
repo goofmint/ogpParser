@@ -72,6 +72,6 @@
     "example": "example"
   },
   "volta": {
-    "node": "12.22.12"
+    "node": "18.0.0"
   }
 }

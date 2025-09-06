@@ -1,25 +1,30 @@
 import iconv from 'iconv-lite';
 import sniffHTMLEncoding from 'html-encoding-sniffer';
-const codecTypes = ['UTF-8', 'ascii', 'ISO-8859-2'] as const;
+
+const passThroughCodecs = ['UTF-8', 'ascii'] as const;
 
 const checkShiftJis = (codec: string): string => {
-  if (codec.match(/^(windows|Shift_JIS).*/i)) {
+  if (/^(windows|Shift_JIS).*/i.test(codec)) {
     return 'cp932';
-  } else {
-    return codec;
   }
+  return codec;
 };
 
-export const charsetConverter = (buf: ArrayBuffer) => {
+export const charsetConverter = (buf: ArrayBuffer | string): string => {
+  if (typeof buf === 'string') return buf;
+
   const unitArray = new Uint8Array(buf);
   const detected = sniffHTMLEncoding(unitArray);
-  if (codecTypes.some((codec) => detected === codec)) {
-    return buf.toString();
-  }
+
   try {
-    const res = iconv.decode(Buffer.from(buf), checkShiftJis(detected));
-    return res;
-  } catch (e) {
-    return buf.toString();
+    if (passThroughCodecs.includes(detected as any)) {
+      const enc = detected.toLowerCase() === 'utf-8' ? 'utf8' : 'ascii';
+      return Buffer.from(unitArray).toString(enc);
+    }
+    // Fallback to iconv-lite for non-UTF8/ascii (e.g., Shift_JIS, EUC-JP, etc.)
+    return iconv.decode(Buffer.from(unitArray), checkShiftJis(detected));
+  } catch (_) {
+    // Last resort: best-effort UTF-8
+    return Buffer.from(unitArray).toString('utf8');
   }
 };

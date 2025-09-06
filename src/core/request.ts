@@ -1,19 +1,18 @@
-import { IncomingHttpHeaders } from 'http';
-import https, { RequestOptions as RequestOptionsBase } from 'https';
-
-type Options = Pick<RequestOptionsBase, 'headers' | 'method'>;
-
-type RequestConfig = RequestInit & {
+type RequestConfig = {
   url: string;
+  method?: string;
+  headers?: any;
+  body?: any;
 };
+
 type ResponseData<T> = {
   status: number;
-  headers?: Headers;
-  arrayBuffer: ArrayBuffer;
   text: string;
+  arrayBuffer: ArrayBuffer;
   data?: T;
   config: RequestConfig;
 };
+
 const REDIRECT_LOOP_LIMIT = 20;
 
 const httpRequest = async <T = any>(
@@ -21,50 +20,38 @@ const httpRequest = async <T = any>(
   options: RequestInit = {},
   count = 0
 ): Promise<ResponseData<T>> => {
-  while (count < REDIRECT_LOOP_LIMIT) {
-    try {
-      const res = await fetch(url, options);
-      const status = res.status ?? 0;
-      if (status >= 300 && status < 400 && res.headers.has('location')) {
-        const originalUrl = new URL(url);
-        const newUrl = new URL(
-          res.headers.get('location') ?? '',
-          originalUrl.origin
-        ).toString();
-        return httpRequest(newUrl, options, count + 1);
-      }
-      const arrayBuffer = await res.arrayBuffer();
-      const decoder = new TextDecoder("utf-8");
-      const text = decoder.decode(arrayBuffer);
-      const responseData: ResponseData<T> = {
-        status,
-        headers: res.headers,
-        text,
-        arrayBuffer,
-        data: undefined,
-        config: {
-          ...options,
-          url,
-        },
-      };
-      try {
-        responseData.data = JSON.parse(text);
-      } catch (err) {
-      }
-      return responseData;
-    } catch (err) {
-      console.error(err);
-      count++;
+  if (count > REDIRECT_LOOP_LIMIT) {
+    throw new Error('Request Error');
+  }
+  const res = await fetch(url, options);
+  const status = res.status ?? 0;
+  // Follow redirects when Location header present (MSW returns mocked 3xx responses)
+  if (status >= 300 && status < 400) {
+    const location = res.headers?.get ? res.headers.get('location') : undefined;
+    if (location) {
+      const original = new URL(url);
+      const next = new URL(location, original.origin).toString();
+      return httpRequest<T>(next, options, count + 1);
     }
   }
-  throw new Error('Request Error');
+  const arrayBuffer = await res.arrayBuffer();
+  const text = new TextDecoder('utf-8').decode(arrayBuffer);
+  const responseData: ResponseData<T> = {
+    status,
+    text,
+    arrayBuffer,
+    data: undefined,
+    config: { url, method: options.method, headers: options.headers as any, body: (options as any).body },
+  };
+  try { responseData.data = JSON.parse(text); } catch {}
+  return responseData;
 };
 
-export type RequestOptions = Omit<Options, 'method'>;
+export type RequestOptions = Omit<RequestInit, 'method'>;
 
 export const request = {
   get: <T = any>(url: string, options: RequestInit = {}) =>
-    httpRequest<T>(url, { ...options, method: 'get' }),
+    httpRequest<T>(url, { ...options, method: 'GET' }),
   post: <T = any>(url: string, options: RequestInit = {}) =>
-    httpRequest<T>(url, { ...options, method: 'post' }),
+    httpRequest<T>(url, { ...options, method: 'POST' }),
 };

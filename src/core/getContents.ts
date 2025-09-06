@@ -7,5 +7,8 @@ export const getContents = async (
 ): Promise<string> => {
   const headers = config?.headers;
   const res = await request.get(url, { headers });
+  if (res.status >= 400) {
+    throw new Error(`Request failed with status ${res.status}`);
+  }
   return charsetConverter(res.arrayBuffer ?? res.text ?? '');
 };

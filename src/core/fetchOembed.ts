@@ -85,8 +85,8 @@ const getForXml = async (url: string): Promise<OembedData | undefined> => {
   const res = await getContents(url, { headers });
   const oembedXml = res.toString();
   const options = {
-    tagValueProcessor: (val: string) => he.decode(val),
-  };
+    tagValueProcessor: (_tagName: string, tagValue: string) => he.decode(tagValue),
+  } as const;
   const parseXML = new XMLParser(options);
   const oembed = parseXML.parse(oembedXml);
   if (oembed.oembed) {
